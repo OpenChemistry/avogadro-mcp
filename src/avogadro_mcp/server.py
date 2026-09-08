@@ -46,6 +46,37 @@ def _abs_path(path: str) -> str:
     return str(Path(path).expanduser().resolve())
 
 
+def _clarify_write_error(exc: ToolError, resolved_path: str) -> ToolError:
+    """
+    Add a hint to a write-failure ToolError, distinguishing "the parent
+    directory does not exist on this host" -- almost always a client/host
+    filesystem mismatch, since paths are resolved on the machine running
+    avogadro-mcp -- from "the directory exists but the write still failed"
+    (permissions, disk space, a locked file, ...), which is not that.
+
+    Only called for failures from a call that carried a resolved path (the
+    C++ side reports both cases with the same generic message, so this is
+    the only place with enough information to tell them apart), and never
+    changes the underlying error code -- just appends context.
+    """
+    parent = Path(resolved_path).parent
+    if not parent.is_dir():
+        hint = (
+            f" The directory '{parent}' does not exist on the machine "
+            "running the avogadro-mcp server (and Avogadro). Paths are "
+            "resolved on that host, not on whichever machine sent this "
+            "tool call -- if this looks like a path from a sandboxed or "
+            "remote client, that is almost certainly the problem."
+        )
+    else:
+        hint = (
+            f" The directory '{parent}' exists on the server host, so "
+            "this is not a path mismatch -- check permissions, free disk "
+            "space, or whether the file is open elsewhere."
+        )
+    return ToolError(str(exc) + hint)
+
+
 def create_server(client: AvogadroClient) -> MCPServer:
     """Build and return a fully-configured MCPServer bound to `client`."""
 
@@ -199,6 +230,13 @@ def create_server(client: AvogadroClient) -> MCPServer:
             the scene's current background colour.
         :param path: If given, write the PNG here instead of returning it
             inline. ".png" is appended if the name has no extension.
+            Resolved to an absolute path before sending, so it is read and
+            written on whatever machine is running the avogadro-mcp server
+            (and Avogadro) -- not on the machine that sent this tool call.
+            In a sandboxed or remote client, a path that looks valid there
+            (e.g. "/mnt/user-data/outputs/...") will not exist on the
+            server host; omit `path` and use the inline image instead if
+            you cannot be sure the two machines share a filesystem.
         """
         if (width is None) != (height is None):
             raise ToolError(
@@ -217,7 +255,12 @@ def create_server(client: AvogadroClient) -> MCPServer:
         if resolved_path is not None:
             params["fileName"] = resolved_path
 
-        result = await client.call("renderImage", params)
+        try:
+            result = await client.call("renderImage", params)
+        except ToolError as exc:
+            if resolved_path is not None:
+                raise _clarify_write_error(exc, resolved_path) from exc
+            raise
         summary = {
             "width": result.get("width"),
             "height": result.get("height"),
@@ -291,7 +334,15 @@ def create_server(client: AvogadroClient) -> MCPServer:
 
     @mcp.tool()
     async def zoom(delta: float) -> dict:
-        """Zoom the camera. Positive values zoom in toward the molecule."""
+        """
+        Zoom the camera. Positive values move toward the molecule, negative
+        away from it.
+
+        One unit of delta is roughly a 2% change in the camera's distance
+        to the focal point, so useful values for framing a small molecule
+        are typically around 10 to 20 (a large change is more than one
+        call away -- call it again rather than passing a huge delta).
+        """
         await client.call("zoomScene", {"delta": delta})
         return {"zoomed": delta}
 

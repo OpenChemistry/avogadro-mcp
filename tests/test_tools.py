@@ -124,6 +124,33 @@ async def test_screenshot_to_path(mcp_server, fake_server, tmp_path):
     assert "image" not in kinds
 
 
+async def test_screenshot_write_error_flags_missing_parent_dir(
+    mcp_server, fake_server, tmp_path
+):
+    target = tmp_path / "no-such-subdir" / "shot.png"
+    fake_server.set_error(
+        "renderImage", -1, f"Could not write image to {target.resolve()}."
+    )
+    result = await call_tool(mcp_server, "screenshot", {"path": str(target)})
+    assert result.is_error
+    message = _text(result)
+    assert "does not exist" in message
+    assert "not on this host" not in message  # sanity: only one hint fires
+
+
+async def test_screenshot_write_error_with_existing_parent_dir(
+    mcp_server, fake_server, tmp_path
+):
+    target = tmp_path / "shot.png"  # tmp_path itself exists
+    fake_server.set_error(
+        "renderImage", -1, f"Could not write image to {target.resolve()}."
+    )
+    result = await call_tool(mcp_server, "screenshot", {"path": str(target)})
+    assert result.is_error
+    message = _text(result)
+    assert "not a path mismatch" in message
+
+
 async def test_list_display_types(mcp_server, fake_server):
     result = await call_tool(mcp_server, "list_display_types")
     payload = json.loads(_text(result))
