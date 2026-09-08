@@ -186,6 +186,34 @@ def create_server(client: AvogadroClient) -> MCPServer:
         return {"loaded": True, "format": format}
 
     @mcp.tool()
+    async def fetch_molecule(name: str, timeout: float = 60.0) -> dict:
+        """
+        Download a structure by name from public chemical databases over
+        the network, and make it the active molecule, REPLACING whatever
+        is currently open.
+
+        `name` is a common or IUPAC chemical name (e.g. "caffeine",
+        "1,3,7-trimethylxanthine"), not a database ID. The lookup queries
+        the NIH Cactus resolver first, then retries against PubChem's 3D
+        endpoint if Cactus errors or only has 2D coordinates -- this
+        always waits for that to finish before returning, so a
+        screenshot or molecule_info call made right after this one sees
+        the new structure.
+
+        :param name: A common or IUPAC chemical name to look up.
+        :param timeout: Seconds to allow the download before giving up.
+        """
+        result = await client.call(
+            "fetchByName", {"name": name}, wait=True, timeout=timeout
+        )
+        message = None
+        data: dict[str, Any] = {}
+        if isinstance(result, dict):
+            message = result.get("message")
+            data = result.get("data") or {}
+        return {"message": message, **data}
+
+    @mcp.tool()
     async def get_molecule(format: str = "cjson") -> dict:
         """
         Read the active molecule back as text, without writing a file to

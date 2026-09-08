@@ -7,8 +7,10 @@ Synced from avogadrolibs `python/tests/fake_rpc_server.py`
 additions below that commit: stateful getCamera/setCamera/zoomScene/
 rotateScene/translateScene/alignView responders, added directly here for
 the camera-tools usability fix (avogadro-mcp-plan.md phase 2 pulled
-forward). These are not yet part of the upstream avogadrolibs fixture --
-carry them forward by hand on the next re-sync until they land there too.
+forward); and a canned "fetchByName" responder (§5.2-F), added for the
+fetch_molecule tool. These are not yet part of the upstream avogadrolibs
+fixture -- carry them forward by hand on the next re-sync until they land
+there too.
 
 avogadro-mcp's tests need to pass in a fresh clone with no avogadrolibs
 checkout present, so rather than reach across a sibling checkout via
@@ -143,6 +145,29 @@ def _default_export_file(params):
     return True
 
 
+def _default_fetch_by_name(params):
+    # Mirrors the real NetworkDatabases plugin: fetchByName downloads on a
+    # background thread, so without wait it answers before the download
+    # finishes, and with wait it holds the reply for the "finished" shape
+    # carrying the resolved name/source (and, when the plugin could verify
+    # the molecule was already updated, atomCount/formula -- this fixture
+    # always has them). A caller wanting the empty-name/not-found error
+    # paths should use set_error("fetchByName", -2, ...) instead.
+    name = params.get("name", "")
+    if params.get("wait"):
+        return {
+            "status": "finished",
+            "message": "Downloaded %s" % name,
+            "data": {
+                "name": name,
+                "source": "cactus",
+                "atomCount": 24,
+                "formula": "C8H10N4O2",
+            },
+        }
+    return True
+
+
 #: Canned results for every phase 1 method, per Appendix A of the MCP
 #: bridge plan. Each entry is either a plain value or a callable taking
 #: the request's params dict and returning the "result" payload.
@@ -217,6 +242,7 @@ DEFAULT_RESPONSES = {
     "loadMolecule": True,
     "saveGraphic": True,
     "exportFile": _default_export_file,
+    "fetchByName": _default_fetch_by_name,
     "kill": True,
 }
 

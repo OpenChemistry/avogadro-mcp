@@ -46,6 +46,20 @@
       "required": ["content"]
     }
   },
+  "fetchByName": {
+    "description": "Download a structure by name from an online database (NIH Cactus, falling back to PubChem's 3D endpoint) and make it the active molecule. Runs in the background -- pass wait to be told when the download and load have finished.",
+    "kind": "extension",
+    "plugin": "NetworkDatabases",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "A common or IUPAC chemical name, e.g. \"caffeine\"." }
+      },
+      "required": ["name"]
+    }
+  },
   "moleculeInfo": {
     "description": "Summarize the active molecule: atom/bond counts, formula, mass, charge, and what it has (a unit cell, a basis set, vibrations, ...).",
     "kind": "builtin",

@@ -74,6 +74,38 @@ async def test_load_molecule(mcp_server, fake_server):
     assert sent["params"]["format"] == "xyz"
 
 
+async def test_fetch_molecule_waits_by_default(mcp_server, fake_server):
+    result = await call_tool(mcp_server, "fetch_molecule", {"name": "caffeine"})
+    assert not result.is_error
+    sent = fake_server.requests[-1]
+    assert sent["method"] == "fetchByName"
+    assert sent["params"]["name"] == "caffeine"
+    assert sent["params"]["wait"] is True
+    payload = json.loads(_text(result))
+    assert payload["name"] == "caffeine"
+    assert payload["source"] == "cactus"
+    assert payload["atomCount"] == 24
+    assert payload["formula"] == "C8H10N4O2"
+
+
+async def test_fetch_molecule_reports_not_found_clearly(mcp_server, fake_server):
+    fake_server.set_error(
+        "fetchByName", -2, "Specified molecule could not be found: asdfqwerzxcv"
+    )
+    result = await call_tool(mcp_server, "fetch_molecule", {"name": "asdfqwerzxcv"})
+    assert result.is_error
+    assert "could not be found" in _text(result)
+
+
+async def test_fetch_molecule_rejects_empty_name(mcp_server, fake_server):
+    fake_server.set_error(
+        "fetchByName", -2, "fetchByName requires a non-empty 'name' parameter."
+    )
+    result = await call_tool(mcp_server, "fetch_molecule", {"name": ""})
+    assert result.is_error
+    assert "non-empty" in _text(result)
+
+
 async def test_get_molecule_default_cjson(mcp_server, fake_server):
     result = await call_tool(mcp_server, "get_molecule")
     assert not result.is_error
