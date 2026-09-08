@@ -1,7 +1,7 @@
 # avogadro-mcp
 
 An [MCP](https://modelcontextprotocol.io/) server that drives a running
-[Avogadro](https://two.avogadro.cc/) molecular editor over its local
+[Avogadro](https://avogadro.cc/) molecular editor over its local
 JSON-RPC socket. Point Claude Desktop, Claude Code, Cursor, or any other
 MCP client at it, and it can open and inspect molecules and crystals,
 change the view and rendering, render isosurfaces and molecular orbitals,
@@ -10,7 +10,7 @@ and visualization work.
 
 Design and background: see `avogadro-mcp-plan.md` in the `openchemistry`
 superbuild repo. The wire protocol this package speaks is documented at
-<https://two.avogadro.cc/develop/rpc.html>.
+<https://avogadro.cc/develop/rpc.html>.
 
 ## Requirements
 
@@ -137,7 +137,7 @@ Tests run entirely against a fake, in-process RPC server
 ### `catalogue.json`
 
 `src/avogadro_mcp/catalogue.json` is a hand-maintained JSON Schema for
-every command documented at `two.avogadro.cc/source/develop/rpc.md`. The
+every command documented at `avogadro.cc/source/develop/rpc.md`. The
 server overlays it on whatever a running Avogadro's `listCommands` reports,
 so tools have real parameter types even though Avogadro's own
 `commandSchema()` introspection (a later phase) does not exist yet. Keep it
