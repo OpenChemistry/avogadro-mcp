@@ -1,0 +1,538 @@
+{
+  "_comment": "Curated JSON-schema entries for the commands documented in two.avogadro.cc/source/develop/rpc.md (§4.2 of avogadro-mcp-plan.md). The server overlays this on whatever listCommands() reports at runtime, so tools have real parameter types on day one. Every entry is marked \"source\": \"catalogue\" so a future app-provided schema (§4.3 of the plan, commandSchema()) wins when present. Keep this in sync with rpc.md by hand until the doc-build check in the plan exists.",
+
+  "version": {
+    "description": "Report the running Avogadro app, avogadrolibs, and Qt versions, and the RPC protocol level.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "listCommands": {
+    "description": "List every command Avogadro will answer, built-in and plugin alike.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "openFile": {
+    "description": "Read a file from disk and make it the active molecule. The format is inferred from the extension.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "fileName": { "type": "string", "description": "Path to the file to open." }
+      },
+      "required": ["fileName"]
+    }
+  },
+  "loadMolecule": {
+    "description": "Read molecular data from a string in any format Avogadro can read, and make it the active molecule.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "content": { "type": "string", "description": "The file contents as a string." },
+        "format": { "type": "string", "default": "cjson", "description": "Any file format Avogadro can read, e.g. \"xyz\", \"cml\", \"pdb\", \"sdf\"." }
+      },
+      "required": ["content"]
+    }
+  },
+  "moleculeInfo": {
+    "description": "Summarize the active molecule: atom/bond counts, formula, mass, charge, and what it has (a unit cell, a basis set, vibrations, ...).",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "getMolecule": {
+    "description": "Read the active molecule back as text, in any format FileFormatManager can write, without touching disk.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "format": { "type": "string", "default": "cjson", "description": "Any file format Avogadro can write, e.g. \"xyz\", \"cml\", \"pdb\", \"sdf\"." }
+      },
+      "required": []
+    }
+  },
+  "exportFile": {
+    "description": "Write the active molecule to a file, guessing the format from the extension. Runs on a background thread -- pass wait to be told when the write has actually finished.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "fileName": { "type": "string", "description": "Path to write." }
+      },
+      "required": ["fileName"]
+    }
+  },
+  "saveGraphic": {
+    "description": "Save a bitmap image of the active view at its current on-screen size. \".png\" is appended if the name has no extension.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "fileName": { "type": "string", "description": "Path to write." }
+      },
+      "required": ["fileName"]
+    }
+  },
+  "renderImage": {
+    "description": "Render the view at any size, to a file or back inline as PNG bytes. Omit width/height for the native framebuffer resolution, or supply both together.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 8192, "description": "Image width in pixels. Must be given together with height, or not at all." },
+        "height": { "type": "integer", "minimum": 1, "maximum": 8192, "description": "Image height in pixels. Must be given together with width, or not at all." },
+        "transparentBackground": { "type": "boolean", "default": false, "description": "Render with a transparent background instead of the scene's background colour." },
+        "fileName": { "type": "string", "description": "Path to write the PNG to. If omitted, the image is returned inline as base64 in the reply." }
+      },
+      "required": []
+    }
+  },
+  "setProjection": {
+    "description": "Switch the camera projection.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["perspective", "orthographic"], "description": "The projection to switch to." }
+      },
+      "required": ["type"]
+    }
+  },
+  "setRenderTypes": {
+    "description": "Choose which scene display types are active, either as a list of names to turn on or a map of name to boolean.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "types": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Display type identifiers to turn on, e.g. [\"BallStick\", \"VanDerWaals\"]."
+        }
+      },
+      "required": []
+    }
+  },
+  "listDisplayTypes": {
+    "description": "List the scene display types available for the active view, and whether each is on, applicable, and configurable.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "internalPing": {
+    "description": "Check whether the server is responsive. Answers \"pong\".",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "kill": {
+    "description": "Shut down Avogadro. Only enabled when started with --testing, which the argument parser currently rejects, so this is unreachable in practice.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+
+  "createBonds": {
+    "description": "Perceive bonds between all atoms, or within the selection if there is one.",
+    "kind": "extension",
+    "plugin": "Bonding",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "removeBonds": {
+    "description": "Remove bonds from all atoms, or from the selection.",
+    "kind": "extension",
+    "plugin": "Bonding",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "addBondOrders": {
+    "description": "Perceive bond orders.",
+    "kind": "extension",
+    "plugin": "Bonding",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "centerAtom": {
+    "description": "Move the molecule so that this atom sits at the origin. Atoms are numbered from zero.",
+    "kind": "extension",
+    "plugin": "Navigator",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "index": { "type": "integer", "minimum": 0, "description": "Zero-based atom index." }
+      },
+      "required": ["index"]
+    }
+  },
+  "alignAtom": {
+    "description": "Rotate the molecule so this atom lies along an axis.",
+    "kind": "extension",
+    "plugin": "Navigator",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "index": { "type": "integer", "minimum": 0, "description": "Zero-based atom index." },
+        "axis": {
+          "description": "\"x\", \"y\", \"z\", or 0, 1, 2.",
+          "anyOf": [
+            { "type": "string", "enum": ["x", "y", "z"] },
+            { "type": "integer", "enum": [0, 1, 2] }
+          ]
+        }
+      },
+      "required": ["index", "axis"]
+    }
+  },
+
+  "rotateScene": {
+    "description": "Rotate the camera about the screen x, y, and z axes, through the current focal point.",
+    "kind": "tool",
+    "plugin": "Navigator",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number", "default": 0, "description": "Degrees to rotate about the screen x axis." },
+        "y": { "type": "number", "default": 0, "description": "Degrees to rotate about the screen y axis." },
+        "z": { "type": "number", "default": 0, "description": "Degrees to rotate about the screen z axis." }
+      },
+      "required": []
+    }
+  },
+  "zoomScene": {
+    "description": "Zoom in or out. Positive values move toward the molecule.",
+    "kind": "tool",
+    "plugin": "Navigator",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "delta": { "type": "number", "description": "Positive to zoom in, negative to zoom out." }
+      },
+      "required": ["delta"]
+    }
+  },
+  "translateScene": {
+    "description": "Pan the camera by a distance given in screen pixels.",
+    "kind": "tool",
+    "plugin": "Navigator",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number", "default": 0, "description": "Pixels to pan horizontally." },
+        "y": { "type": "number", "default": 0, "description": "Pixels to pan vertically." }
+      },
+      "required": []
+    }
+  },
+  "alignView": {
+    "description": "Align the view to the x, y, and z axes, centered on the molecule and backed off far enough to frame it.",
+    "kind": "extension",
+    "plugin": "ResetView",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+
+  "wrapUnitCell": {
+    "description": "Wrap all atoms back into the unit cell.",
+    "kind": "extension",
+    "plugin": "Crystal",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "standardCrystalOrientation": {
+    "description": "Rotate the unit cell into the standard orientation.",
+    "kind": "extension",
+    "plugin": "Crystal",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "fillUnitCell": {
+    "description": "Add the symmetry-equivalent atoms implied by the space group.",
+    "kind": "extension",
+    "plugin": "Crystal",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "fillTranslationalCell": {
+    "description": "Fill the cell including atoms related by translation.",
+    "kind": "extension",
+    "plugin": "Crystal",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+
+  "renderVanDerWaals": {
+    "description": "Render the van der Waals surface. Runs in the background; pass wait to know when the surface exists.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "resolution": { "type": "number", "description": "Cube spacing in Å. Avogadro picks a value from the molecule's size (0.05-0.5 Å) if omitted." }
+      },
+      "required": []
+    }
+  },
+  "renderVDW": {
+    "description": "Alias for renderVanDerWaals.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "resolution": { "type": "number", "description": "Cube spacing in Å." }
+      },
+      "required": []
+    }
+  },
+  "renderSolventAccessible": {
+    "description": "Render the solvent-accessible surface. Runs in the background; pass wait to know when the surface exists.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "resolution": { "type": "number", "description": "Cube spacing in Å." }
+      },
+      "required": []
+    }
+  },
+  "renderSolventExcluded": {
+    "description": "Render the solvent-excluded surface. Runs in the background; pass wait to know when the surface exists.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "resolution": { "type": "number", "description": "Cube spacing in Å." }
+      },
+      "required": []
+    }
+  },
+  "renderMO": {
+    "description": "Render a molecular orbital, for a file that includes a basis set. Runs in the background; pass wait to know when the surface exists.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "orbital": {
+          "description": "A number counting from 1 (the lowest orbital), or a name relative to the frontier orbitals: \"homo\", \"lumo\", \"homo-1\", \"lumo+2\", etc.",
+          "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "string" }]
+        },
+        "isovalue": { "type": "number", "default": 0.03, "description": "The isosurface value." },
+        "resolution": { "type": "number", "description": "Cube spacing in Å. Avogadro picks a value from the molecule's size if omitted." },
+        "spin": { "type": "string", "enum": ["alpha", "beta"], "description": "\"beta\" for the beta orbitals of an open-shell calculation; alpha is used otherwise." }
+      },
+      "required": []
+    }
+  },
+  "renderOrbital": {
+    "description": "Alias for renderMO.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "orbital": {
+          "description": "A number counting from 1, or a name like \"homo\", \"lumo\", \"homo-1\".",
+          "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "string" }]
+        },
+        "isovalue": { "type": "number", "default": 0.03 },
+        "resolution": { "type": "number" },
+        "spin": { "type": "string", "enum": ["alpha", "beta"] }
+      },
+      "required": []
+    }
+  },
+  "renderElectronDensity": {
+    "description": "Render the total electron density. Runs in the background; pass wait to know when the surface exists.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "isovalue": { "type": "number", "default": 0.03, "description": "The isosurface value." },
+        "resolution": { "type": "number", "description": "Cube spacing in Å." },
+        "spin": { "type": "string", "enum": ["alpha", "beta"] }
+      },
+      "required": []
+    }
+  },
+  "renderSpinDensity": {
+    "description": "Render the spin density. Runs in the background; pass wait to know when the surface exists.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "isovalue": { "type": "number", "default": 0.03, "description": "The isosurface value." },
+        "resolution": { "type": "number", "description": "Cube spacing in Å." },
+        "spin": { "type": "string", "enum": ["alpha", "beta"] }
+      },
+      "required": []
+    }
+  },
+  "renderCube": {
+    "description": "Render a cube that came with the file. Runs in the background; pass wait to know when the surface exists.",
+    "kind": "extension",
+    "plugin": "Surfaces",
+    "async": true,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "index": { "type": "integer", "minimum": 1, "default": 1, "description": "Cube number, counting from one. Defaults to the first cube." },
+        "isovalue": { "type": "number", "default": 0.03, "description": "The isosurface value." }
+      },
+      "required": []
+    }
+  },
+
+  "showVibrations": {
+    "description": "Open the vibrational modes dialog.",
+    "kind": "extension",
+    "plugin": "Vibrations",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "setVibrationalMode": {
+    "description": "Select a vibrational mode, numbered from zero.",
+    "kind": "extension",
+    "plugin": "Vibrations",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "integer", "minimum": 0, "description": "Zero-based mode index." }
+      },
+      "required": ["mode"]
+    }
+  },
+  "setVibrationalAmplitude": {
+    "description": "Set the animation amplitude, on the same 0-99 scale as the dialog slider (which starts at 20).",
+    "kind": "extension",
+    "plugin": "Vibrations",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "amplitude": { "type": "number", "minimum": 0, "maximum": 99, "description": "Animation amplitude, 0-99." }
+      },
+      "required": ["amplitude"]
+    }
+  },
+  "startVibrationAnimation": {
+    "description": "Start animating the selected vibrational mode.",
+    "kind": "extension",
+    "plugin": "Vibrations",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "stopVibrationAnimation": {
+    "description": "Stop the vibrational animation.",
+    "kind": "extension",
+    "plugin": "Vibrations",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "generateDisplacedCoordinates": {
+    "description": "Append coordinate sets displaced along one or more vibrational modes.",
+    "kind": "extension",
+    "plugin": "Vibrations",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "modes": {
+          "description": "Mode number(s), zero-based. A single \"mode\" is also accepted.",
+          "anyOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+          ]
+        },
+        "scale": { "type": "number", "default": 1.0, "description": "Displacement scale factor." },
+        "structures": { "type": "integer", "minimum": 1, "default": 1, "description": "How many displaced geometries to generate." }
+      },
+      "required": ["modes"]
+    }
+  }
+}

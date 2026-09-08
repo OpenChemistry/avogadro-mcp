@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "avogadro-mcp"
+version = "0.1.0"
+description = "MCP server for driving the Avogadro molecular editor -- open, view, and render molecules and materials for computational chemistry and molecular visualization from any MCP client"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Geoff Hutchison", email = "geoff.hutchison@gmail.com" },
+    { name = "Open Chemistry" },
+]
+keywords = [
+    "avogadro",
+    "mcp",
+    "model-context-protocol",
+    "molecular-editor",
+    "computational-chemistry",
+    "molecular-visualization",
+    "cheminformatics",
+    "molecules",
+    "crystallography",
+    "quantum-chemistry",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "mcp>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.urls]
+Homepage = "https://two.avogadro.cc/"
+Repository = "https://github.com/OpenChemistry/avogadro-mcp"
+Documentation = "https://two.avogadro.cc/develop/mcp.html"
+"Bug Tracker" = "https://github.com/OpenChemistry/avogadro-mcp/issues"
+
+[project.scripts]
+avogadro-mcp = "avogadro_mcp.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/avogadro_mcp"]
+artifacts = [
+    "src/avogadro_mcp/catalogue.json",
+    "src/avogadro_mcp/docs/*.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
