@@ -144,3 +144,19 @@ so tools have real parameter types even though Avogadro's own
 in sync with `rpc.md` by hand; each catalogue entry is marked
 `"source": "catalogue"` so a future app-provided schema wins automatically
 once one exists.
+
+## Screenshots do not appear inline in Claude chat
+
+`screenshot` returns a spec-correct MCP image block, but claude.ai and Claude
+Desktop do not currently render images from tool results inline: the tool-call
+block is collapsed behind an expander, and image blocks are not shown in the
+assistant's reply. The model *does* receive the image and can reason about it;
+only the human has to expand the block to see it. This is a client limitation,
+tracked upstream, not something this server can fix — reshaping the response to
+force rendering would make it non-conforming once the clients catch up.
+
+To get a picture you can actually look at, pass a path:
+
+```
+screenshot(path="/tmp/caffeine.png", width=1200, height=900)
+```

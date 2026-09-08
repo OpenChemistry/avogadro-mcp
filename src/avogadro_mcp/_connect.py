@@ -7,7 +7,7 @@
 Vendored copy -- do not hand-edit.
 
 Synced from avogadrolibs `python/avogadro/connect.py`
-(https://github.com/OpenChemistry/avogadrolibs), commit 5180f9172
+(https://github.com/OpenChemistry/avogadrolibs), commit b8ce0e1e4
 ("Add phase 1 introspection helpers to avogadro.connect").
 
 avogadro-mcp vendors this one pure-Python file instead of depending on the
@@ -231,7 +231,7 @@ class connect:
             )
         return response
 
-    def command(self, name, wait=False, timeout=None, **params):
+    def command(self, name, /, wait=False, timeout=None, **params):
         """
         Run a command registered by a tool or extension plugin.
 
