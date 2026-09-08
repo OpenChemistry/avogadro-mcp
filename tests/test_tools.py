@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import json
 
+import pytest
 from mcp import Client
 
 from tests._vendor.fake_rpc_server import TINY_PNG_BYTES
@@ -192,19 +193,130 @@ async def test_set_projection_rejects_bad_enum(mcp_server, fake_server):
 
 
 async def test_rotate_zoom_translate_reset(mcp_server, fake_server):
-    await call_tool(mcp_server, "rotate", {"x": 10, "y": 0, "z": 0})
-    assert fake_server.requests[-1]["method"] == "rotateScene"
-    assert fake_server.requests[-1]["params"] == {"x": 10, "y": 0, "z": 0}
+    # Each call must hit the right RPC method with the right params, *and*
+    # (the actual usability fix) come back with the resulting camera state
+    # -- not an echo of what was sent -- so a caller can converge without
+    # screenshotting after every attempt.
+    result = await call_tool(mcp_server, "rotate", {"x": 10, "y": 0, "z": 0})
+    assert not result.is_error
+    assert fake_server.requests[-2]["method"] == "rotateScene"
+    assert fake_server.requests[-2]["params"] == {"x": 10, "y": 0, "z": 0}
+    assert fake_server.requests[-1]["method"] == "getCamera"
+    payload = json.loads(_text(result))
+    assert "distance" in payload
+    assert "projection" in payload
+    assert "x" not in payload  # not an echo of the input
 
-    await call_tool(mcp_server, "zoom", {"delta": 5})
-    assert fake_server.requests[-1]["method"] == "zoomScene"
-    assert fake_server.requests[-1]["params"] == {"delta": 5}
+    result = await call_tool(mcp_server, "zoom", {"delta": 5})
+    assert not result.is_error
+    assert fake_server.requests[-2]["method"] == "zoomScene"
+    assert fake_server.requests[-2]["params"] == {"delta": 5}
+    payload = json.loads(_text(result))
+    assert "distance" in payload
+    assert payload["delta"] == 5
 
-    await call_tool(mcp_server, "translate", {"x": 1, "y": 2})
-    assert fake_server.requests[-1]["method"] == "translateScene"
+    result = await call_tool(mcp_server, "translate", {"x": 1, "y": 2})
+    assert not result.is_error
+    assert fake_server.requests[-2]["method"] == "translateScene"
+    payload = json.loads(_text(result))
+    assert "distance" in payload
 
-    await call_tool(mcp_server, "reset_view")
-    assert fake_server.requests[-1]["method"] == "alignView"
+    result = await call_tool(mcp_server, "reset_view")
+    assert not result.is_error
+    assert fake_server.requests[-2]["method"] == "alignView"
+    payload = json.loads(_text(result))
+    assert "distance" in payload
+
+
+async def test_zoom_factor_doubles_apparent_size(mcp_server, fake_server):
+    """factor=2.0 should send delta=25 (the measured "+25 doubles size"
+    law) and report achieved close to 2.0, not clamped."""
+    result = await call_tool(mcp_server, "zoom", {"factor": 2.0})
+    assert not result.is_error
+    sent = [r for r in fake_server.requests if r["method"] == "zoomScene"][-1]
+    assert sent["params"]["delta"] == 25.0
+
+    payload = json.loads(_text(result))
+    assert payload["factor"] == 2.0
+    assert payload["achieved"] == pytest.approx(2.0, rel=1e-6)
+    assert payload["clamped"] is False
+
+
+async def test_zoom_factor_half_sends_negative_fifty(mcp_server, fake_server):
+    """factor=0.5 should send delta=-50 (the measured "halving needs -50"
+    asymmetry)."""
+    result = await call_tool(mcp_server, "zoom", {"factor": 0.5})
+    assert not result.is_error
+    sent = [r for r in fake_server.requests if r["method"] == "zoomScene"][-1]
+    assert sent["params"]["delta"] == -50.0
+
+    payload = json.loads(_text(result))
+    assert payload["achieved"] == pytest.approx(0.5, rel=1e-6)
+    assert payload["clamped"] is False
+
+
+async def test_zoom_reports_clamped_when_it_underdelivers(mcp_server, fake_server):
+    """A large factor hits the fake server's clamp (a stand-in for the real
+    distance-dependent Navigator::zoom clamp): achieved falls well short of
+    what was requested, and the tool must say so rather than leaving the
+    caller to guess from a screenshot."""
+    result = await call_tool(mcp_server, "zoom", {"factor": 100.0})
+    assert not result.is_error
+    payload = json.loads(_text(result))
+    assert payload["factor"] == 100.0
+    assert payload["achieved"] < 100.0
+    assert payload["clamped"] is True
+
+
+async def test_zoom_requires_exactly_one_of_delta_or_factor(mcp_server, fake_server):
+    both = await call_tool(mcp_server, "zoom", {"delta": 5, "factor": 2.0})
+    assert both.is_error
+
+    neither = await call_tool(mcp_server, "zoom", {})
+    assert neither.is_error
+
+    # And neither malformed call should have reached Avogadro.
+    assert not any(r["method"] == "zoomScene" for r in fake_server.requests)
+
+
+async def test_zoom_rejects_nonpositive_factor(mcp_server, fake_server):
+    for bad_factor in (0, -1.0):
+        result = await call_tool(mcp_server, "zoom", {"factor": bad_factor})
+        assert result.is_error
+    assert not any(r["method"] == "zoomScene" for r in fake_server.requests)
+
+
+async def test_get_camera(mcp_server, fake_server):
+    result = await call_tool(mcp_server, "get_camera")
+    assert not result.is_error
+    payload = json.loads(_text(result))
+    assert payload["distance"] == pytest.approx(12.34)
+    assert payload["projection"] == "perspective"
+    assert len(payload["modelView"]) == 16
+
+
+async def test_set_camera_requires_at_least_one_argument(mcp_server, fake_server):
+    result = await call_tool(mcp_server, "set_camera", {})
+    assert result.is_error
+    assert not any(r["method"] == "setCamera" for r in fake_server.requests)
+
+
+async def test_set_camera_projection(mcp_server, fake_server):
+    result = await call_tool(mcp_server, "set_camera", {"projection": "orthographic"})
+    assert not result.is_error
+    sent = fake_server.requests[-1]
+    assert sent["method"] == "setCamera"
+    assert sent["params"] == {"projection": "orthographic"}
+    payload = json.loads(_text(result))
+    assert payload["projection"] == "orthographic"
+
+
+async def test_set_camera_rejects_short_model_view(mcp_server, fake_server):
+    fake_server.set_error(
+        "setCamera", -1, "setCamera's modelView must be exactly 16 numbers."
+    )
+    result = await call_tool(mcp_server, "set_camera", {"model_view": [1.0, 2.0, 3.0]})
+    assert result.is_error
 
 
 async def test_render_surface_always_waits(mcp_server, fake_server):

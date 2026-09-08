@@ -23,6 +23,38 @@ from .client import AvogadroClient
 
 _DOCS_DIR = Path(__file__).parent / "docs"
 
+#: zoomScene's ZOOM_SPEED constant (Navigator::zoom in navigator.cpp):
+#: t = delta * ZOOM_SPEED, and the camera's distance to the focus becomes
+#: distance * (1 - t). Apparent size goes as 1/distance, so apparent size
+#: scales as 1/(1 - ZOOM_SPEED*delta) -- a hyperbola with a pole at
+#: delta = 1/ZOOM_SPEED (50). Measured against a live Avogadro: predicted
+#: and measured agree within 0.5% below the clamp (see `zoom` below for the
+#: clamp itself, which is distance-dependent and caps how far one call can
+#: approach).
+_ZOOM_SPEED = 0.02
+_ZOOM_POLE_DELTA = 1.0 / _ZOOM_SPEED
+
+
+def _predicted_zoom_ratio(delta: float) -> float:
+    """The apparent-size ratio `delta` would produce with no clamp."""
+    denominator = 1.0 - _ZOOM_SPEED * delta
+    if denominator <= 0:
+        return float("inf")
+    return 1.0 / denominator
+
+
+def _factor_to_delta(factor: float) -> float:
+    """
+    Convert an intuitive "make it this many times bigger" factor into the
+    raw zoomScene delta. Inverts _predicted_zoom_ratio: solving
+    factor = 1/(1 - 0.02*delta) for delta gives 50*(1 - 1/factor).
+
+    Check: factor=2 -> delta=25 (matches the measured "+25 doubles size");
+    factor=0.5 -> delta=-50 (matches "halving needs -50").
+    """
+    return _ZOOM_POLE_DELTA * (1.0 - 1.0 / factor)
+
+
 #: Maps the render_surface "kind" enum onto the RPC command it sends.
 SURFACE_METHODS = {
     "van_der_waals": "renderVanDerWaals",
@@ -328,29 +360,98 @@ def create_server(client: AvogadroClient) -> MCPServer:
         """
         Rotate the camera about the screen x, y, and z axes, in degrees,
         through the current focal point.
+
+        Returns the resulting camera state (the same shape as get_camera)
+        rather than an echo of x/y/z, so a caller can converge on a
+        framing from the reply alone, without a screenshot after every
+        call.
         """
         await client.call("rotateScene", {"x": x, "y": y, "z": z})
-        return {"rotated": {"x": x, "y": y, "z": z}}
+        return await client.call("getCamera")
 
     @mcp.tool()
-    async def zoom(delta: float) -> dict:
+    async def zoom(delta: float | None = None, factor: float | None = None) -> dict:
         """
-        Zoom the camera. Positive values move toward the molecule, negative
-        away from it.
+        Zoom the camera -- move it toward or away from the current focal
+        point -- and report the resulting distance, so a caller can see
+        the actual effect instead of screenshotting after every attempt.
 
-        One unit of delta is roughly a 2% change in the camera's distance
-        to the focal point, so useful values for framing a small molecule
-        are typically around 10 to 20 (a large change is more than one
-        call away -- call it again rather than passing a huge delta).
+        Give exactly one of `factor` or `delta`:
+
+        :param factor: An intuitive multiplicative target: "make the
+            molecule this many times bigger on screen". factor=2.0
+            doubles apparent size, factor=0.5 halves it. Converted to
+            `delta` as 50 * (1 - 1/factor). Must be greater than 0.
+        :param delta: Avogadro's raw zoom control. Positive moves toward
+            the molecule, negative away. The real law (measured against
+            a live Avogadro): apparent size scales as
+            1/(1 - 0.02*delta) -- a hyperbola with a pole at delta=50,
+            where the camera would pass through the focal point. This
+            makes the scale asymmetric: +25 doubles apparent size, but
+            halving it takes -50. A clamp inside Avogadro
+            (Navigator::zoom) caps how far a single call can approach
+            the focus, so a large delta -- or a large `factor`, which is
+            converted to one -- can silently under-deliver; see
+            `achieved`/`clamped` below rather than guessing. Repeated
+            calls compound multiplicatively: prefer a couple of moderate
+            calls over one extreme one.
+
+        The reply carries the post-zoom camera state (`distance`,
+        `projection`, etc, from get_camera) plus:
+
+        * `achieved`: the actual multiplicative change in apparent size,
+          measured from the camera's distance before and after this
+          call -- compare against `factor` (or the ratio `delta`
+          implies) to see whether the move landed.
+        * `clamped`: true if `achieved` fell meaningfully short of what
+          was requested -- e.g. a request for factor=5 that only
+          achieved ~2x. When true, call zoom again rather than
+          repeating the same oversized request.
         """
+        if (delta is None) == (factor is None):
+            raise ToolError(
+                "zoom needs exactly one of 'delta' or 'factor', not both "
+                "and not neither."
+            )
+
+        if factor is not None:
+            if factor <= 0:
+                raise ToolError(f"zoom's factor must be greater than 0, got {factor}.")
+            delta = _factor_to_delta(factor)
+
+        before = await client.call("getCamera")
+        distance_before = before.get("distance")
+
         await client.call("zoomScene", {"delta": delta})
-        return {"zoomed": delta}
+
+        after = await client.call("getCamera")
+        distance_after = after.get("distance")
+
+        result: dict[str, Any] = dict(after)
+        result["delta"] = delta
+        if factor is not None:
+            result["factor"] = factor
+
+        requested_ratio = factor if factor is not None else _predicted_zoom_ratio(delta)
+        if distance_before and distance_after:
+            achieved_ratio = distance_before / distance_after
+            result["achieved"] = achieved_ratio
+            # 2% slack for floating-point/measurement noise around the
+            # clamp boundary, so an unclamped move never reads as clamped.
+            result["clamped"] = achieved_ratio < requested_ratio * 0.98
+
+        return result
 
     @mcp.tool()
     async def translate(x: float = 0, y: float = 0) -> dict:
-        """Pan the camera by a distance given in screen pixels."""
+        """
+        Pan the camera by a distance given in screen pixels.
+
+        Returns the resulting camera state (the same shape as
+        get_camera), not an echo of x/y.
+        """
         await client.call("translateScene", {"x": x, "y": y})
-        return {"translated": {"x": x, "y": y}}
+        return await client.call("getCamera")
 
     @mcp.tool()
     async def reset_view() -> dict:
@@ -358,9 +459,65 @@ def create_server(client: AvogadroClient) -> MCPServer:
         Align the view to the x, y, and z axes, centered on the molecule
         and backed off far enough to frame it. The equivalent of pressing
         the "reset view" toolbar button.
+
+        Returns the resulting camera state (the same shape as
+        get_camera).
         """
         await client.call("alignView")
-        return {"reset": True}
+        return await client.call("getCamera")
+
+    @mcp.tool()
+    async def get_camera() -> dict:
+        """
+        Report the active view's camera: distance to the focal point, the
+        focus point, the projection mode, the orthographic scale, and the
+        full model view matrix.
+
+        `modelView` is 16 floats in row-major order: element
+        `[row * 4 + col]` is `modelView[row][col]`.
+
+        Save the result and hand it back to set_camera to restore this
+        exact view later -- for a reproducible figure, or a turntable
+        movie built from repeated rotate calls each followed by a
+        screenshot.
+        """
+        return await client.call("getCamera")
+
+    @mcp.tool()
+    async def set_camera(
+        model_view: list[float] | None = None,
+        projection: Literal["perspective", "orthographic"] | None = None,
+        orthographic_scale: float | None = None,
+    ) -> dict:
+        """
+        Apply a saved camera view. Give any combination of the three
+        parameters -- only what is given is changed.
+
+        :param model_view: The 16-float row-major model view matrix from
+            a previous get_camera call (element `[row * 4 + col]` is
+            `modelView[row][col]`). Must be exactly 16 numbers.
+        :param projection: Switch between perspective and orthographic.
+        :param orthographic_scale: The orthographic zoom factor (only
+            has a visible effect in orthographic projection).
+
+        Returns the resulting camera state (the same shape as
+        get_camera).
+        """
+        if model_view is None and projection is None and orthographic_scale is None:
+            raise ToolError(
+                "set_camera needs at least one of model_view, projection, "
+                "or orthographic_scale."
+            )
+
+        params: dict[str, Any] = {}
+        if model_view is not None:
+            params["modelView"] = model_view
+        if projection is not None:
+            params["projection"] = projection
+        if orthographic_scale is not None:
+            params["orthographicScale"] = orthographic_scale
+
+        return await client.call("setCamera", params)
 
     @mcp.tool()
     async def render_surface(

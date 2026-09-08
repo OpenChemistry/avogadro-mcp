@@ -283,6 +283,30 @@
     "source": "catalogue",
     "schema": { "type": "object", "properties": {}, "required": [] }
   },
+  "getCamera": {
+    "description": "Report the active view's camera: distance to focus, focus point, projection, orthographic scale, and the model view matrix (16 floats, row-major).",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": { "type": "object", "properties": {}, "required": [] }
+  },
+  "setCamera": {
+    "description": "Apply a model view matrix and/or projection settings to the active view's camera. Returns the same shape as getCamera.",
+    "kind": "builtin",
+    "plugin": "",
+    "async": false,
+    "source": "catalogue",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "modelView": { "type": "array", "items": { "type": "number" }, "minItems": 16, "maxItems": 16, "description": "16 floats, row-major: element [row*4+col] is modelView[row][col]." },
+        "projection": { "type": "string", "enum": ["perspective", "orthographic"], "description": "The projection to switch to." },
+        "orthographicScale": { "type": "number", "description": "The orthographic zoom factor." }
+      },
+      "required": []
+    }
+  },
 
   "wrapUnitCell": {
     "description": "Wrap all atoms back into the unit cell.",

@@ -3,7 +3,12 @@ Vendored copy -- do not hand-edit.
 
 Synced from avogadrolibs `python/tests/fake_rpc_server.py`
 (https://github.com/OpenChemistry/avogadrolibs), commit 5180f9172
-("Add phase 1 introspection helpers to avogadro.connect").
+("Add phase 1 introspection helpers to avogadro.connect"), PLUS local
+additions below that commit: stateful getCamera/setCamera/zoomScene/
+rotateScene/translateScene/alignView responders, added directly here for
+the camera-tools usability fix (avogadro-mcp-plan.md phase 2 pulled
+forward). These are not yet part of the upstream avogadrolibs fixture --
+carry them forward by hand on the next re-sync until they land there too.
 
 avogadro-mcp's tests need to pass in a fresh clone with no avogadrolibs
 checkout present, so rather than reach across a sibling checkout via
@@ -14,8 +19,9 @@ avogadro_mcp/_connect.py vendors connect.py itself. It has no dependency on
 is safe.
 
 To re-sync: diff this file against the current avogadrolibs
-python/tests/fake_rpc_server.py, copy the new version in, and update the
-commit hash above.
+python/tests/fake_rpc_server.py, copy the new version in, reapply the local
+additions noted above if upstream still lacks them, and update the commit
+hash above.
 
 ---- original module docstring below ----
 
@@ -250,6 +256,82 @@ class FakeRPCServer:
         self._socket = None
         self._thread = None
         self._stop = threading.Event()
+
+        # Per-instance camera state for getCamera/setCamera/zoomScene/
+        # rotateScene/translateScene/alignView, so a test can zoom (or set a
+        # camera directly) and then read the effect back via getCamera. This
+        # is a simplified stand-in for Avogadro's real camera -- it tracks
+        # only a scalar distance-to-focus plus the other getCamera fields,
+        # and applies zoomScene's real ratio law (1/(1 - 0.02*delta)) with a
+        # deliberately-tighter-than-real clamp (t capped at 0.9, vs. the
+        # real Navigator::zoom clamp, which is distance-dependent) so tests
+        # have a deterministic, reachable "clamped" case. setdefault, not a
+        # plain assignment, so a caller can still override these via the
+        # `responses` constructor argument the way any other method can.
+        self._camera = {
+            "distance": 12.34,
+            "focus": [0.0, 0.0, 0.0],
+            "projection": "perspective",
+            "orthographicScale": 1.0,
+        }
+        self._responses.setdefault("getCamera", self._get_camera)
+        self._responses.setdefault("setCamera", self._set_camera)
+        self._responses.setdefault("zoomScene", self._zoom_scene)
+        self._responses.setdefault("rotateScene", lambda params: True)
+        self._responses.setdefault("translateScene", lambda params: True)
+        self._responses.setdefault("alignView", self._align_view)
+
+    # -- camera state (getCamera/setCamera/zoomScene/alignView) ----------
+
+    @staticmethod
+    def _model_view_for_distance(distance):
+        """
+        A model view matrix consistent with `distance`: identity rotation,
+        translated -distance along Z, as 16 row-major floats. Not a
+        faithful reproduction of Avogadro's actual camera math (see
+        Camera::distance in avogadro/rendering/camera.cpp for the real
+        thing) -- just enough that getCamera's "distance" and "modelView"
+        fields agree with each other.
+        """
+        return [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, -distance,
+            0.0, 0.0, 0.0, 1.0,
+        ]
+
+    def _get_camera(self, params):
+        camera = dict(self._camera)
+        camera["modelView"] = self._model_view_for_distance(camera["distance"])
+        return camera
+
+    def _set_camera(self, params):
+        model_view = params.get("modelView")
+        if model_view is not None and len(model_view) == 16:
+            # Row 2, col 3 (flat index 2*4+3=11) carries -distance in the
+            # simplified matrix _model_view_for_distance builds.
+            self._camera["distance"] = abs(model_view[11])
+        if "projection" in params:
+            self._camera["projection"] = params["projection"]
+        if "orthographicScale" in params:
+            self._camera["orthographicScale"] = params["orthographicScale"]
+        return self._get_camera(params)
+
+    def _zoom_scene(self, params):
+        delta = params.get("delta", 0)
+        t = delta * 0.02  # Navigator::zoom's ZOOM_SPEED
+        # Simplified stand-in for the real distance-dependent clamp: cap
+        # the per-call approach well short of the delta=50 pole, so a
+        # large factor/delta reliably exercises the "clamped" path in
+        # tests without the real clamp's distance-dependent threshold.
+        t = min(t, 0.9)
+        self._camera["distance"] *= 1.0 - t
+        return True
+
+    def _align_view(self, params):
+        self._camera["distance"] = 12.34
+        self._camera["focus"] = [0.0, 0.0, 0.0]
+        return True
 
     def set_result(self, method, result):
         """Answer the next (and all subsequent) calls to method with result."""

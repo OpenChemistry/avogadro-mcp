@@ -11,8 +11,9 @@ from avogadro_mcp.catalogue import (
 
 def test_load_catalogue_has_every_documented_command():
     catalogue = load_catalogue()
-    # 14 builtins + 28 plugin commands documented in rpc.md (§4.2 of the plan).
-    assert len(catalogue) == 42
+    # 16 builtins (14 + getCamera/setCamera) + 28 plugin commands documented
+    # in rpc.md (§4.2 of the plan).
+    assert len(catalogue) == 44
     assert "_comment" not in catalogue
     assert catalogue["openFile"]["schema"]["required"] == ["fileName"]
     assert catalogue["renderMO"]["async"] is True
